@@ -112,7 +112,7 @@ with engine.connect() as conn:
 
 # === AFFICHAGE ===
 st.title("📊 Résultats filtrés")
-colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", "client","aff_id"]
+colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", "client"]
 df_clean = df.drop(columns=colonnes_a_supprimer, errors="ignore")
 st.dataframe(df_clean)
 
