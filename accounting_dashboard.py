@@ -3,8 +3,6 @@ import pandas as pd
 from sqlalchemy import create_engine
 from datetime import date, timedelta
 
-import streamlit as st
-
 DB_TYPE = 'postgresql+psycopg2'
 DB_USER = st.secrets["DB_USER"]
 DB_PASS = st.secrets["DB_PASS"]
