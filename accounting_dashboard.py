@@ -20,7 +20,7 @@ def charger_options():
     with engine.connect() as conn:
         clients = pd.read_sql("SELECT DISTINCT client FROM stat", conn)["client"].dropna().tolist()
         campaigns = pd.read_sql("SELECT DISTINCT id, name FROM campaign", conn)
-        verticals = pd.read_sql("SELECT DISTINCT vertical_id FROM campaign", conn)["vertical_id"].dropna().tolist()
+        verticals = pd.read_sql("SELECT DISTINCT name FROM vertical", conn)["name"].dropna().tolist()
         countries = pd.read_sql("SELECT DISTINCT zipcode FROM registration", conn)["zipcode"].dropna().tolist()
         ads = pd.read_sql("SELECT DISTINCT aff_id FROM stat", conn)["aff_id"].dropna().tolist()
     return clients, campaigns, verticals, countries, ads
@@ -51,7 +51,7 @@ if selected_campaigns:
     params["campaigns"] = tuple(selected_campaigns)
 
 if selected_verticals:
-    clauses.append("c.vertical IN :verticals")
+    clauses.append("v.name IN :verticals")
     params["verticals"] = tuple(selected_verticals)
 
 if selected_countries:
@@ -75,7 +75,7 @@ SELECT
     s.client,
     s.price_eur,
     s.currency,
-    s.vertical_name,
+    v.name AS vertical_name,
     c.name AS campaign_name,
     l.email AS lead_email,
     r.firstname,
@@ -88,6 +88,7 @@ FROM stat s
 JOIN registration r ON r.id = s.registration
 LEFT JOIN lead l ON l.registration_id = r.id
 LEFT JOIN campaign c ON c.id = l.campaign_id
+LEFT JOIN vertical v ON c.vertical_id = v.id
 WHERE {where_clause}
 LIMIT 1000
 """)
