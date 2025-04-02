@@ -127,10 +127,22 @@ with engine.connect() as conn:
     df = pd.read_sql(query, conn, params=params)
 
 # === AFFICHAGE ===
+
 # Calcul de la chaleur du lead en minutes
 df["lead_heat_minutes"] = (
     pd.to_datetime(df["lead_created_at"]) - pd.to_datetime(df["registration_created_at"])
-).dt.total_seconds() / 60
+)
+
+def formater_duree(td):
+    jours = td.days
+    heures, reste = divmod(td.seconds, 3600)
+    minutes, _ = divmod(reste, 60)
+    return f"{jours}j {heures}h {minutes}m"
+
+df["lead_heat"] = df["lead_heat_minutes"].apply(formater_duree)
+df.drop(columns=["lead_heat_minutes"], inplace=True)
+
+
 
 # Suppression des colonnes inutiles
 colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", "registration_created_at"]
