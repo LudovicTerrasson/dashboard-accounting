@@ -98,8 +98,12 @@ with engine.connect() as conn:
 
 # === AFFICHAGE ===
 st.title("📊 Résultats filtrés")
-st.dataframe(df)
+colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city"]
+df_clean = df.drop(columns=colonnes_a_supprimer, errors="ignore")
+st.dataframe(df_clean)
+
 
 # === EXPORT CSV ===
-st.download_button("📥 Télécharger CSV", df.to_csv(index=False).encode("utf-8"), file_name="résultats_filtrés.csv")
+st.download_button("📥 Télécharger CSV", df_clean.to_csv(index=False).encode("utf-8"), file_name="résultats_filtrés.csv")
+
 
