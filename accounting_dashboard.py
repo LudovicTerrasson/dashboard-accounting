@@ -20,11 +20,14 @@ def charger_options():
     with engine.connect() as conn:
         clients_df = pd.read_sql("SELECT id, name FROM client", conn)
         clients_mapping = dict(zip(clients_df["name"], clients_df["id"]))
+        clients_names = list(clients_mapping.keys())
         campaigns = pd.read_sql("SELECT DISTINCT id, name FROM campaign", conn)
         verticals = pd.read_sql("SELECT DISTINCT name FROM vertical", conn)["name"].dropna().tolist()
         countries = pd.read_sql("SELECT DISTINCT zipcode FROM registration", conn)["zipcode"].dropna().tolist()
         ads = pd.read_sql("SELECT DISTINCT aff_id FROM stat", conn)["aff_id"].dropna().tolist()
     return clients_mapping, campaigns, verticals, countries, ads
+
+clients_mapping, campaigns, verticals, countries, ads = charger_options()
 
 # 🔁 Mapping des campagnes : nom → ID
 campaign_mapping = dict(zip(campaigns["name"], campaigns["id"]))
