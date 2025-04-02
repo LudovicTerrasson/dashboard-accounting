@@ -3,13 +3,14 @@ import pandas as pd
 from sqlalchemy import create_engine
 from datetime import date, timedelta
 
-# Connexion base PostgreSQL
-DB_TYPE = 'postgresql+psycopg2'
-DB_HOST = 'ppc-db.vertigodata.com'
-DB_PORT = '5432'
-DB_USER = 'lterrason'
-DB_PASS = 'OpkI1fESY2KEsbHCigGxBUwUhtH5jNp5'
-DB_NAME = 'sweepstakes'
+import streamlit as st
+
+DB_USER = st.secrets["DB_USER"]
+DB_PASS = st.secrets["DB_PASS"]
+DB_HOST = st.secrets["DB_HOST"]
+DB_PORT = st.secrets["DB_PORT"]
+DB_NAME = st.secrets["DB_NAME"]
+
 
 engine = create_engine(f'{DB_TYPE}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}')
 
