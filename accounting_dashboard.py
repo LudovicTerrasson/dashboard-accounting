@@ -33,7 +33,6 @@ clients_mapping, campaigns, verticals, countries, ads = charger_options()
 campaign_mapping = dict(zip(campaigns["name"], campaigns["id"]))
 campaign_names = list(campaign_mapping.keys())
 
-clients_mapping, campaigns, verticals, countries, ads = charger_options()
 client_names = list(clients_mapping.keys())
 
 # === SIDEBAR FILTRES ===
