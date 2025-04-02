@@ -27,11 +27,17 @@ def charger_options():
 
 clients, campaigns, verticals, countries, ads = charger_options()
 
+# 🔁 Mapping des campagnes : nom → ID
+campaign_mapping = dict(zip(campaigns["name"], campaigns["id"]))
+campaign_names = list(campaign_mapping.keys())
+
+
 # === SIDEBAR FILTRES ===
 st.sidebar.title("🔍 Filtres")
 
 selected_clients = st.sidebar.multiselect("Client", clients)
-selected_campaigns = st.sidebar.multiselect("Campagne", campaigns["id"].tolist())
+selected_campaign_names = st.sidebar.multiselect("Campagnes", campaign_names)
+selected_campaigns = [campaign_mapping[name] for name in selected_campaign_names]
 selected_verticals = st.sidebar.multiselect("Vertical", verticals)
 selected_countries = st.sidebar.multiselect("Code postal", countries)
 selected_ads = st.sidebar.multiselect("Ad ID (aff_id)", ads)
