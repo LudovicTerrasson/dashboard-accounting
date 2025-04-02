@@ -20,7 +20,7 @@ def charger_options():
     with engine.connect() as conn:
         clients = pd.read_sql("SELECT DISTINCT client FROM stat", conn)["client"].dropna().tolist()
         campaigns = pd.read_sql("SELECT DISTINCT id, name FROM campaign", conn)
-        verticals = pd.read_sql("SELECT DISTINCT vertical FROM campaign", conn)["vertical"].dropna().tolist()
+        verticals = pd.read_sql("SELECT DISTINCT vertical_id FROM campaign", conn)["vertical_id"].dropna().tolist()
         countries = pd.read_sql("SELECT DISTINCT zipcode FROM registration", conn)["zipcode"].dropna().tolist()
         ads = pd.read_sql("SELECT DISTINCT aff_id FROM stat", conn)["aff_id"].dropna().tolist()
     return clients, campaigns, verticals, countries, ads
