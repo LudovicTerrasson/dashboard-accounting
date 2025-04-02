@@ -3,7 +3,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 from datetime import date, timedelta
 
-DB_TYPE = 'postgresql+psycopg2'
+DB_TYPE = st.secrets["DB_TYPE"]
 DB_USER = st.secrets["DB_USER"]
 DB_PASS = st.secrets["DB_PASS"]
 DB_HOST = st.secrets["DB_HOST"]
