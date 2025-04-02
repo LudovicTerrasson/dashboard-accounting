@@ -84,7 +84,7 @@ where_clause = " AND ".join(clauses)
 query = text(f"""
 SELECT
     s.id AS stat_id,
-    s.client,
+    cl.name AS client_name,
     s.price_eur,
     s.currency,
     v.name AS vertical_name,
@@ -101,6 +101,7 @@ JOIN registration r ON r.id = s.registration
 LEFT JOIN lead l ON l.registration_id = r.id
 LEFT JOIN campaign c ON c.id = l.campaign_id
 LEFT JOIN vertical v ON c.vertical_id = v.id
+LEFT JOIN client cl ON cl.id = s.client
 WHERE {where_clause}
 LIMIT 1000
 """)
@@ -111,7 +112,7 @@ with engine.connect() as conn:
 
 # === AFFICHAGE ===
 st.title("📊 Résultats filtrés")
-colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city"]
+colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", "client"]
 df_clean = df.drop(columns=colonnes_a_supprimer, errors="ignore")
 st.dataframe(df_clean)
 
