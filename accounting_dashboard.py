@@ -27,6 +27,13 @@ query = f"""
 SELECT * FROM accounting
 WHERE date BETWEEN '{date_debut}' AND '{date_fin}'
 """
+try:
+    engine.connect()
+    st.success("Connexion DB OK ✅")
+except Exception as e:
+    st.error("Connexion échouée ❌")
+    st.exception(e)
+    st.stop()
 
 df = pd.read_sql(query, engine)
 
