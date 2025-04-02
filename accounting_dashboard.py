@@ -18,24 +18,30 @@ engine = create_engine(f"{DB_TYPE}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB
 @st.cache_data(ttl=3600)
 def charger_options():
     with engine.connect() as conn:
-        clients = pd.read_sql("SELECT DISTINCT client FROM stat", conn)["client"].dropna().tolist()
+        clients_df = pd.read_sql("SELECT id, name FROM client", conn)
+        clients_mapping = dict(zip(clients_df["name"], clients_df["id"]))
+        clients_names = list(clients_mapping.keys())
         campaigns = pd.read_sql("SELECT DISTINCT id, name FROM campaign", conn)
         verticals = pd.read_sql("SELECT DISTINCT name FROM vertical", conn)["name"].dropna().tolist()
         countries = pd.read_sql("SELECT DISTINCT zipcode FROM registration", conn)["zipcode"].dropna().tolist()
         ads = pd.read_sql("SELECT DISTINCT aff_id FROM stat", conn)["aff_id"].dropna().tolist()
-    return clients, campaigns, verticals, countries, ads
+    return clients_mapping, campaigns, verticals, countries, ads
 
-clients, campaigns, verticals, countries, ads = charger_options()
+clients_mapping, campaigns, verticals, countries, ads = charger_options()
 
 # 🔁 Mapping des campagnes : nom → ID
 campaign_mapping = dict(zip(campaigns["name"], campaigns["id"]))
 campaign_names = list(campaign_mapping.keys())
 
+clients_mapping, campaigns, verticals, countries, ads = charger_options()
+client_names = list(clients_mapping.keys())
+
 
 # === SIDEBAR FILTRES ===
 st.sidebar.title("🔍 Filtres")
 
-selected_clients = st.sidebar.multiselect("Client", clients)
+selected_client_names = st.sidebar.multiselect("Clients", client_names)
+selected_clients = [clients_mapping[name] for name in selected_client_names]
 selected_campaign_names = st.sidebar.multiselect("Campagnes", campaign_names)
 selected_campaigns = [campaign_mapping[name] for name in selected_campaign_names]
 selected_verticals = st.sidebar.multiselect("Vertical", verticals)
