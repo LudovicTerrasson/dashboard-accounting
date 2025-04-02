@@ -88,33 +88,61 @@ SELECT
     s.currency,
     v.name AS vertical_name,
     c.name AS campaign_name,
+    l.id AS lead_id,
     l.email AS lead_email,
+    r.created_at AS registration_created_at,
+    s.lead_created_at,
     r.firstname,
     r.lastname,
     r.zipcode,
     r.city,
     s.aff_id,
-    r.others::json->>'source' AS affiliate_name,  -- récupération directe de la source
-    s.lead_created_at
+    r.others::json->>'source' AS affiliate_name,
+    r.others::json->>'aff_sub' AS aff_sub,
+    r.others::json->>'aff_sub2' AS aff_sub2,
+    r.others::json->>'aff_sub3' AS aff_sub3,
+    r.others::json->>'aff_sub4' AS aff_sub4,
+    r.others::json->>'aff_sub5' AS aff_sub5,
+    r.others::json->>'publisher_id' AS publisher_id,
+    r.others::json->>'country' AS country,
+    lcls.status AS last_client_status
 FROM stat s
 JOIN registration r ON r.id = s.registration
 LEFT JOIN lead l ON l.registration_id = r.id
 LEFT JOIN campaign c ON c.id = l.campaign_id
 LEFT JOIN vertical v ON c.vertical_id = v.id
 LEFT JOIN client cl ON cl.id = s.client
+LEFT JOIN (
+    SELECT DISTINCT ON (lead_id) lead_id, status
+    FROM lead_client_lead_status
+    ORDER BY lead_id, created_at DESC
+) lcls ON lcls.lead_id = l.id
 WHERE {where_clause}
 LIMIT 1000
 """)
+
 
 # === EXÉCUTION REQUÊTE ===
 with engine.connect() as conn:
     df = pd.read_sql(query, conn, params=params)
 
 # === AFFICHAGE ===
-st.title("📊 Résultats filtrés")
-colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", "client"]
-df_clean = df.drop(columns=colonnes_a_supprimer, errors="ignore")
-st.dataframe(df_clean)
+# Calcul de la chaleur du lead en minutes
+df["lead_heat_minutes"] = (
+    pd.to_datetime(df["lead_created_at"]) - pd.to_datetime(df["registration_created_at"])
+).dt.total_seconds() / 60
 
-# === EXPORT CSV ===
-st.download_button("📥 Télécharger CSV", df_clean.to_csv(index=False).encode("utf-8"), file_name="résultats_filtrés.csv")
+# Suppression des colonnes inutiles
+colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", "registration_created_at"]
+df_clean = df.drop(columns=colonnes_a_supprimer, errors="ignore")
+
+# Affichage
+st.title("📊 Résultats filtrés")
+st.dataframe(df_clean, use_container_width=True)
+
+# Export
+st.download_button(
+    "📥 Télécharger CSV",
+    df_clean.to_csv(index=False).encode("utf-8"),
+    file_name="résultats_filtrés.csv"
+)
