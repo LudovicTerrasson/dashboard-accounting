@@ -1,104 +1,105 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine
-from datetime import date, timedelta
+from sqlalchemy import create_engine, text
+from datetime import date
+from urllib.parse import quote_plus
 
+# 🔐 Connexion BDD
 DB_TYPE = st.secrets["DB_TYPE"]
 DB_USER = st.secrets["DB_USER"]
-DB_PASS = st.secrets["DB_PASS"]
+DB_PASS = quote_plus(st.secrets["DB_PASS"])
 DB_HOST = st.secrets["DB_HOST"]
 DB_PORT = st.secrets["DB_PORT"]
 DB_NAME = st.secrets["DB_NAME"]
 
+engine = create_engine(f"{DB_TYPE}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
-engine = create_engine(f'{DB_TYPE}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}')
+# 🧠 Chargement des valeurs pour les filtres
+@st.cache_data(ttl=3600)
+def charger_options():
+    with engine.connect() as conn:
+        clients = pd.read_sql("SELECT DISTINCT client FROM stat", conn)["client"].dropna().tolist()
+        campaigns = pd.read_sql("SELECT DISTINCT id, name FROM campaign", conn)
+        verticals = pd.read_sql("SELECT DISTINCT vertical FROM campaign", conn)["vertical"].dropna().tolist()
+        countries = pd.read_sql("SELECT DISTINCT zipcode FROM registration", conn)["zipcode"].dropna().tolist()
+        ads = pd.read_sql("SELECT DISTINCT aff_id FROM stat", conn)["aff_id"].dropna().tolist()
+    return clients, campaigns, verticals, countries, ads
 
-st.set_page_config(page_title="Dashboard Accounting", layout="wide")
+clients, campaigns, verticals, countries, ads = charger_options()
 
-st.title("📊 Dashboard Accounting (Version Table Unique)")
+# === SIDEBAR FILTRES ===
+st.sidebar.title("🔍 Filtres")
 
-# Filtrage global
-st.sidebar.header("Filtres globaux")
+selected_clients = st.sidebar.multiselect("Client", clients)
+selected_campaigns = st.sidebar.multiselect("Campagne", campaigns["id"].tolist())
+selected_verticals = st.sidebar.multiselect("Vertical", verticals)
+selected_countries = st.sidebar.multiselect("Code postal", countries)
+selected_ads = st.sidebar.multiselect("Ad ID (aff_id)", ads)
+date_debut = st.sidebar.date_input("Date de début", date(2024, 1, 1))
+date_fin = st.sidebar.date_input("Date de fin", date(2024, 12, 31))
 
-date_debut = st.sidebar.date_input("📅 Date de début", date(2020, 1, 1))
-date_fin = st.sidebar.date_input("📅 Date de fin", date(2020, 12, 31))
+# === CONSTRUCTION REQUÊTE SQL DYNAMIQUE ===
+clauses = ["1=1"]
+params = {}
 
-query = f"""
-SELECT * FROM accounting
-WHERE date BETWEEN '{date_debut}' AND '{date_fin}'
-"""
-try:
-    engine.connect()
-    st.success("Connexion DB OK ✅")
-except Exception as e:
-    st.error("Connexion échouée ❌")
-    st.exception(e)
-    st.stop()
+if selected_clients:
+    clauses.append("s.client IN :clients")
+    params["clients"] = tuple(selected_clients)
 
-df = pd.read_sql(query, engine)
+if selected_campaigns:
+    clauses.append("c.id IN :campaigns")
+    params["campaigns"] = tuple(selected_campaigns)
 
-# Onglets
-onglet = st.tabs(["👤 Par Client", "🎯 Par Campagne", "🌍 Par Pays"])
+if selected_verticals:
+    clauses.append("c.vertical IN :verticals")
+    params["verticals"] = tuple(selected_verticals)
 
-# Onglet Client
-with onglet[0]:
-    st.subheader("👤 Vue par client")
-    clients = df["client_id"].unique()
-    client_filtre = st.multiselect("Sélectionner un ou plusieurs clients", clients, default=clients)
+if selected_countries:
+    clauses.append("r.zipcode IN :countries")
+    params["countries"] = tuple(selected_countries)
 
-    df_client = df[df["client_id"].isin(client_filtre)]
-    df_grouped = df_client.groupby("client_id").agg({
-        "leads": "sum",
-        "cancelation": "sum",
-        "net_leads": "sum",
-        "total": "sum",
-        "validated": "sum",
-        "invoiced": "sum"
-    }).reset_index()
+if selected_ads:
+    clauses.append("s.aff_id IN :ads")
+    params["ads"] = tuple(selected_ads)
 
-    st.dataframe(df_grouped)
+clauses.append("s.lead_created_at BETWEEN :start_date AND :end_date")
+params["start_date"] = date_debut
+params["end_date"] = date_fin
 
-    st.download_button("📥 Télécharger CSV - Clients", df_grouped.to_csv(index=False).encode('utf-8'),
-                       file_name="rapport_par_client.csv", mime="text/csv")
+where_clause = " AND ".join(clauses)
 
-# Onglet Campagne
-with onglet[1]:
-    st.subheader("🎯 Vue par campagne")
-    campagnes = df["campaign_id"].unique()
-    campagne_filtre = st.multiselect("Sélectionner une ou plusieurs campagnes", campagnes, default=campagnes)
+# === REQUÊTE GLOBALE JOINTURE ===
+query = text(f"""
+SELECT
+    s.id AS stat_id,
+    s.client,
+    s.price_eur,
+    s.currency,
+    s.vertical_name,
+    c.name AS campaign_name,
+    l.email AS lead_email,
+    r.firstname,
+    r.lastname,
+    r.zipcode,
+    r.city,
+    s.aff_id,
+    s.lead_created_at
+FROM stat s
+JOIN registration r ON r.id = s.registration
+LEFT JOIN lead l ON l.registration_id = r.id
+LEFT JOIN campaign c ON c.id = l.campaign_id
+WHERE {where_clause}
+LIMIT 1000
+""")
 
-    df_campagne = df[df["campaign_id"].isin(campagne_filtre)]
-    df_grouped = df_campagne.groupby("campaign_id").agg({
-        "leads": "sum",
-        "cancelation": "sum",
-        "net_leads": "sum",
-        "total": "sum",
-        "validated": "sum",
-        "invoiced": "sum"
-    }).reset_index()
+# === EXÉCUTION REQUÊTE ===
+with engine.connect() as conn:
+    df = pd.read_sql(query, conn, params=params)
 
-    st.dataframe(df_grouped)
+# === AFFICHAGE ===
+st.title("📊 Résultats filtrés")
+st.dataframe(df)
 
-    st.download_button("📥 Télécharger CSV - Campagnes", df_grouped.to_csv(index=False).encode('utf-8'),
-                       file_name="rapport_par_campagne.csv", mime="text/csv")
+# === EXPORT CSV ===
+st.download_button("📥 Télécharger CSV", df.to_csv(index=False).encode("utf-8"), file_name="résultats_filtrés.csv")
 
-# Onglet Pays
-with onglet[2]:
-    st.subheader("🌍 Vue par pays")
-    pays = df["country_id"].unique()
-    pays_filtre = st.multiselect("Sélectionner un ou plusieurs pays", pays, default=pays)
-
-    df_pays = df[df["country_id"].isin(pays_filtre)]
-    df_grouped = df_pays.groupby("country_id").agg({
-        "leads": "sum",
-        "cancelation": "sum",
-        "net_leads": "sum",
-        "total": "sum",
-        "validated": "sum",
-        "invoiced": "sum"
-    }).reset_index()
-
-    st.dataframe(df_grouped)
-
-    st.download_button("📥 Télécharger CSV - Pays", df_grouped.to_csv(index=False).encode('utf-8'),
-                       file_name="rapport_par_pays.csv", mime="text/csv")
