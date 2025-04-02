@@ -14,6 +14,18 @@ DB_NAME = st.secrets["DB_NAME"]
 
 engine = create_engine(f"{DB_TYPE}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
+# Fonction pour charger dynamiquement le mapping aff_id → source_name depuis la BDD
+def charger_affiliate_mapping():
+    with engine.connect() as conn:
+        result = conn.execute("""
+            SELECT aff_id, others::json->>'source' AS source_name
+            FROM registration
+            WHERE aff_id IS NOT NULL
+            GROUP BY aff_id, source_name
+        """)
+        return {row[0]: row[1] for row in result}
+
+
 # 🧠 Chargement des valeurs pour les filtres
 @st.cache_data(ttl=3600)
 def charger_options():
@@ -106,13 +118,20 @@ WHERE {where_clause}
 LIMIT 1000
 """)
 
+# Récupération du mapping dynamique aff_id → source
+aff_mapping = charger_affiliate_mapping()
+
+
 # === EXÉCUTION REQUÊTE ===
 with engine.connect() as conn:
     df = pd.read_sql(query, conn, params=params)
 
+df["affiliate_name"] = df["aff_id"].map(aff_mapping).fillna("Inconnu")
+
+
 # === AFFICHAGE ===
 st.title("📊 Résultats filtrés")
-colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", "client"]
+colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", "client","aff_id"]
 df_clean = df.drop(columns=colonnes_a_supprimer, errors="ignore")
 st.dataframe(df_clean)
 
