@@ -14,18 +14,6 @@ DB_NAME = st.secrets["DB_NAME"]
 
 engine = create_engine(f"{DB_TYPE}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
-# Fonction pour charger dynamiquement le mapping aff_id → source_name depuis la BDD
-def charger_affiliate_mapping():
-    with engine.connect() as conn:
-        result = conn.execute("""
-            SELECT aff_id, others::json->>'source' AS source_name
-            FROM registration
-            WHERE aff_id IS NOT NULL
-            GROUP BY aff_id, source_name
-        """)
-        return {row[0]: row[1] for row in result}
-
-
 # 🧠 Chargement des valeurs pour les filtres
 @st.cache_data(ttl=3600)
 def charger_options():
@@ -47,7 +35,6 @@ campaign_names = list(campaign_mapping.keys())
 
 clients_mapping, campaigns, verticals, countries, ads = charger_options()
 client_names = list(clients_mapping.keys())
-
 
 # === SIDEBAR FILTRES ===
 st.sidebar.title("🔍 Filtres")
@@ -107,6 +94,7 @@ SELECT
     r.zipcode,
     r.city,
     s.aff_id,
+    r.others::json->>'source' AS affiliate_name,  -- récupération directe de la source
     s.lead_created_at
 FROM stat s
 JOIN registration r ON r.id = s.registration
@@ -118,16 +106,9 @@ WHERE {where_clause}
 LIMIT 1000
 """)
 
-# Récupération du mapping dynamique aff_id → source
-aff_mapping = charger_affiliate_mapping()
-
-
 # === EXÉCUTION REQUÊTE ===
 with engine.connect() as conn:
     df = pd.read_sql(query, conn, params=params)
-
-df["affiliate_name"] = df["aff_id"].map(aff_mapping).fillna("Inconnu")
-
 
 # === AFFICHAGE ===
 st.title("📊 Résultats filtrés")
@@ -135,8 +116,5 @@ colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", 
 df_clean = df.drop(columns=colonnes_a_supprimer, errors="ignore")
 st.dataframe(df_clean)
 
-
 # === EXPORT CSV ===
 st.download_button("📥 Télécharger CSV", df_clean.to_csv(index=False).encode("utf-8"), file_name="résultats_filtrés.csv")
-
-
