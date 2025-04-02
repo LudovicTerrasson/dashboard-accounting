@@ -133,6 +133,19 @@ df["lead_heat_minutes"] = (
     pd.to_datetime(df["lead_created_at"]) - pd.to_datetime(df["registration_created_at"])
 )
 
+def nettoyer_nom_campagne(nom_campagne, vertical_name):
+    if pd.notnull(vertical_name) and pd.notnull(nom_campagne):
+        prefix = vertical_name + " - "
+        if nom_campagne.startswith(prefix):
+            return nom_campagne[len(prefix):]
+    return nom_campagne
+
+df["campaign_name"] = df.apply(
+    lambda row: nettoyer_nom_campagne(row["campaign_name"], row["vertical_name"]),
+    axis=1
+)
+
+
 def formater_duree(td):
     jours = td.days
     heures, reste = divmod(td.seconds, 3600)
