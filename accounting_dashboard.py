@@ -53,44 +53,76 @@ campaign_names = list(campaign_mapping.keys())
 
 client_names = list(clients_mapping.keys())
 
+# === AJOUT FILTRE PAR VILLE ===
+
+# 🌍 Liste de villes à détecter automatiquement dans les campagnes
+villes_connues = [
+    "Abidjan", "Dakar", "Paris", "Casablanca", "Tunis",
+    "Lyon", "Yaoundé", "Alger", "Bruxelles", "Marseille"
+]
+
+# 🧰 Mapping villes -> campagnes contenant le nom de la ville
+def extraire_groupes_villes(campaign_names, villes):
+    mapping = {}
+    for ville in villes:
+        correspondantes = [c for c in campaign_names if ville.lower() in c.lower()]
+        if correspondantes:
+            mapping[ville] = correspondantes
+    return mapping
+
+ville_mapping = extraire_groupes_villes(campaign_names, villes_connues)
+villes_detectees = list(ville_mapping.keys())
+
 # === SIDEBAR FILTRES ===
 st.sidebar.title("🔍 Filtres")
 
 # === Clients ===
-client_options = ["📌 Tous"] + client_names
-selected_client_names = st.sidebar.multiselect("Clients", client_options)
-if "📌 Tous" in selected_client_names:
-    selected_client_names = client_names
+selected_client_names = st.sidebar.multiselect("Clients", client_names)
 selected_clients = [clients_mapping[name] for name in selected_client_names]
 
 # === Campagnes ===
-campaign_options = ["📌 Tous"] + campaign_names
-selected_campaign_names = st.sidebar.multiselect("Campagnes", campaign_options)
-if "📌 Tous" in selected_campaign_names:
-    selected_campaign_names = campaign_names
-selected_campaigns = [campaign_mapping[name] for name in selected_campaign_names]
+selected_campaign_names = st.sidebar.multiselect("Campagnes", campaign_names)
+
+# 🌍 Localisation (groupes de campagnes détectés par nom de ville)
+villes_connues = [
+    "Abidjan", "Dakar", "Paris", "Casablanca", "Tunis",
+    "Lyon", "Yaoundé", "Alger", "Bruxelles", "Marseille"
+]
+
+def extraire_groupes_villes(campaign_names, villes):
+    mapping = {}
+    for ville in villes:
+        correspondantes = [c for c in campaign_names if ville.lower() in c.lower()]
+        if correspondantes:
+            mapping[ville] = correspondantes
+    return mapping
+
+ville_mapping = extraire_groupes_villes(campaign_names, villes_connues)
+villes_detectees = list(ville_mapping.keys())
+selected_villes = st.sidebar.multiselect("📍 Localisation (par ville détectée)", villes_detectees)
+
+# Ajout des campagnes correspondant aux villes sélectionnées
+campagnes_villes = []
+for ville in selected_villes:
+    campagnes_villes.extend(ville_mapping[ville])
+
+# Fusion des campagnes sélectionnées manuellement et par localisation
+selected_campaign_names = list(set(selected_campaign_names + campagnes_villes))
+selected_campaigns = [campaign_mapping[name] for name in selected_campaign_names if name in campaign_mapping]
 
 # === Verticales ===
-vertical_options = ["📌 Tous"] + verticals
-selected_verticals = st.sidebar.multiselect("Verticales", vertical_options)
-if "📌 Tous" in selected_verticals:
-    selected_verticals = verticals
+selected_verticals = st.sidebar.multiselect("Verticales", verticals)
 
 # === Code postal ===
-zipcode_options = ["📌 Tous"] + countries
-selected_countries = st.sidebar.multiselect("Code postal", zipcode_options)
-if "📌 Tous" in selected_countries:
-    selected_countries = countries
+selected_countries = st.sidebar.multiselect("Code postal", countries)
 
 # === Ads (aff_id) ===
-ads_options = ["📌 Tous"] + ads
-selected_ads = st.sidebar.multiselect("Ad ID (aff_id)", ads_options)
-if "📌 Tous" in selected_ads:
-    selected_ads = ads
+selected_ads = st.sidebar.multiselect("Ad ID (aff_id)", ads)
 
 # === Dates ===
 date_debut = st.sidebar.date_input("Date de début", date(2024, 1, 1))
 date_fin = st.sidebar.date_input("Date de fin", date(2024, 12, 31))
+
 
 
 # === CONSTRUCTION REQUÊTE SQL DYNAMIQUE ===
@@ -313,3 +345,82 @@ else:
             mime="text/csv"
         )
 
+# === TABLEAU FRAÎCHEUR DES LEADS ===
+
+st.header("📊 Ventilation des leads par fraîcheur")
+
+df_fraicheur = df.copy()  # On repart du df d’origine car on a besoin de registration_created_at
+
+# Calcul du délai en minutes
+df_fraicheur["delai"] = pd.to_datetime(df_fraicheur["lead_created_at"]) - pd.to_datetime(df_fraicheur["registration_created_at"])
+
+# Catégorisation des délais
+def catégoriser_délai(td):
+    minutes = td.total_seconds() / 60
+    if minutes < 5:
+        return "moins 5min"
+    elif minutes < 60:
+        return "entre 5min à 1h"
+    elif minutes < 600:
+        return "entre 1h à 10h"
+    elif minutes < 1440:
+        return "Leads de la veille"
+    else:
+        return "Leads de 2j"
+
+df_fraicheur["catégorie"] = df_fraicheur["delai"].apply(catégoriser_délai)
+df_fraicheur["jour"] = pd.to_datetime(df_fraicheur["lead_created_at"]).dt.date
+
+# Agrégation volume + ventilation
+grouped = df_fraicheur.groupby(["jour", "catégorie"]).size().reset_index(name="volume")
+totaux = grouped.groupby("jour")["volume"].transform("sum")
+grouped["ventilation"] = (grouped["volume"] / totaux * 100).round(0).astype(int)
+
+# Création du tableau combiné volume + ventilation
+grouped["cell"] = grouped["volume"].astype(str) + " (" + grouped["ventilation"].astype(str) + "%)"
+pivot_fraicheur = grouped.pivot(index="catégorie", columns="jour", values="cell").fillna("0 (0%)")
+
+# Affichage dans Streamlit
+st.dataframe(pivot_fraicheur, use_container_width=True)
+
+# Export CSV
+csv_export_fraicheur = pivot_fraicheur.reset_index().to_csv(index=False).encode("utf-8")
+st.download_button(
+    label="📥 Télécharger tableau fraîcheur (CSV)",
+    data=csv_export_fraicheur,
+    file_name="ventilation_fraicheur_leads.csv",
+    mime="text/csv"
+)
+
+# === TABLEAU PAR STATUT ET SOURCE ===
+
+st.header("📊 Détail des statuts par source")
+
+df_status = df_clean.copy()
+
+# Remplissage des valeurs manquantes
+df_status["source"] = df_status["affiliate_name"].fillna("unknown")
+df_status["statut"] = df_status["last_client_status"].fillna("no_status")
+
+# Agrégation volume par source et statut
+grouped = df_status.groupby(["source", "statut"]).size().reset_index(name="volume")
+totaux = grouped.groupby("source")["volume"].transform("sum")
+grouped["ventilation"] = (grouped["volume"] / totaux * 100).round(0).astype(int)
+
+# Format combiné
+grouped["cell"] = grouped["volume"].astype(str) + " (" + grouped["ventilation"].astype(str) + "%)"
+
+# Tableau croisé dynamique
+pivot_status = grouped.pivot(index="source", columns="statut", values="cell").fillna("0 (0%)")
+
+# Affichage
+st.dataframe(pivot_status, use_container_width=True)
+
+# Export
+csv_export_status = pivot_status.reset_index().to_csv(index=False).encode("utf-8")
+st.download_button(
+    label="📥 Télécharger le tableau des statuts (CSV)",
+    data=csv_export_status,
+    file_name="statuts_par_source.csv",
+    mime="text/csv"
+)
