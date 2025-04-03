@@ -31,8 +31,10 @@ def charger_options():
         clients_names = list(clients_mapping.keys())
         campaigns = pd.read_sql("""
     SELECT DISTINCT c.id, c.name, v.name AS vertical_name
-    FROM lead l
-    LEFT JOIN campaign c ON l.campaign_id = c.id
+    FROM stat s
+    JOIN registration r ON r.id = s.registration
+    LEFT JOIN lead l ON l.registration_id = r.id
+    LEFT JOIN campaign c ON c.id = l.campaign_id
     LEFT JOIN vertical v ON c.vertical_id = v.id
     WHERE c.id IS NOT NULL
 """, conn)
