@@ -31,12 +31,9 @@ def charger_options():
         clients_names = list(clients_mapping.keys())
         campaigns = pd.read_sql("""
     SELECT DISTINCT c.id, c.name, v.name AS vertical_name
-    FROM stat s
-    JOIN registration r ON r.id = s.registration
-    LEFT JOIN lead l ON l.registration_id = r.id
-    LEFT JOIN campaign c ON c.id = l.campaign_id
+    FROM lead l
+    JOIN campaign c ON c.id = l.campaign_id
     LEFT JOIN vertical v ON c.vertical_id = v.id
-    WHERE c.id IS NOT NULL
 """, conn)
         verticals = pd.read_sql("SELECT DISTINCT name FROM vertical", conn)["name"].dropna().tolist()
         countries = pd.read_sql("SELECT DISTINCT zipcode FROM registration", conn)["zipcode"].dropna().tolist()
