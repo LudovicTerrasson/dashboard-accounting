@@ -134,10 +134,11 @@ df["lead_heat_minutes"] = (
 
 def nettoyer_nom_campagne(nom_campagne, vertical_name):
     if pd.notnull(vertical_name) and pd.notnull(nom_campagne):
-        prefix = vertical_name + " - "
-        if nom_campagne.startswith(prefix):
+        prefix = vertical_name.strip() + " - "
+        if nom_campagne.strip().lower().startswith(prefix.lower()):
             return nom_campagne[len(prefix):]
     return nom_campagne
+
 
 df["campaign_name"] = df.apply(
     lambda row: nettoyer_nom_campagne(row["campaign_name"], row["vertical_name"]),
