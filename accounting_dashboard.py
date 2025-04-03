@@ -14,6 +14,14 @@ DB_NAME = st.secrets["DB_NAME"]
 
 engine = create_engine(f"{DB_TYPE}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
+def nettoyer_nom_campagne(nom_campagne, vertical_name):
+    if pd.notnull(vertical_name) and pd.notnull(nom_campagne):
+        prefix = vertical_name.strip() + " - "
+        if nom_campagne.strip().lower().startswith(prefix.lower()):
+            return nom_campagne[len(prefix):]
+    return nom_campagne
+
+
 # 🧠 Chargement des valeurs pour les filtres
 @st.cache_data(ttl=3600)
 def charger_options():
@@ -21,10 +29,19 @@ def charger_options():
         clients_df = pd.read_sql("SELECT id, name FROM client", conn)
         clients_mapping = dict(zip(clients_df["name"], clients_df["id"]))
         clients_names = list(clients_mapping.keys())
-        campaigns = pd.read_sql("SELECT DISTINCT id, name FROM campaign", conn)
+        campaigns = pd.read_sql("""
+    SELECT DISTINCT c.id, c.name, v.name AS vertical_name
+    FROM campaign c
+    LEFT JOIN vertical v ON c.vertical_id = v.id
+""", conn)
         verticals = pd.read_sql("SELECT DISTINCT name FROM vertical", conn)["name"].dropna().tolist()
         countries = pd.read_sql("SELECT DISTINCT zipcode FROM registration", conn)["zipcode"].dropna().tolist()
         ads = pd.read_sql("SELECT DISTINCT aff_id FROM stat", conn)["aff_id"].dropna().tolist()
+
+        campaigns["clean_name"] = campaigns.apply(
+        lambda row: nettoyer_nom_campagne(row["name"], row["vertical_name"]),
+        axis=1
+)
     return clients_mapping, campaigns, verticals, countries, ads
 
 clients_mapping, campaigns, verticals, countries, ads = charger_options()
@@ -131,14 +148,6 @@ with engine.connect() as conn:
 df["lead_heat_minutes"] = (
     pd.to_datetime(df["lead_created_at"]) - pd.to_datetime(df["registration_created_at"])
 )
-
-def nettoyer_nom_campagne(nom_campagne, vertical_name):
-    if pd.notnull(vertical_name) and pd.notnull(nom_campagne):
-        prefix = vertical_name.strip() + " - "
-        if nom_campagne.strip().lower().startswith(prefix.lower()):
-            return nom_campagne[len(prefix):]
-    return nom_campagne
-
 
 df["campaign_name"] = df.apply(
     lambda row: nettoyer_nom_campagne(row["campaign_name"], row["vertical_name"]),
