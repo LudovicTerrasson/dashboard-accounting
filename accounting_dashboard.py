@@ -56,15 +56,42 @@ client_names = list(clients_mapping.keys())
 # === SIDEBAR FILTRES ===
 st.sidebar.title("🔍 Filtres")
 
-selected_client_names = st.sidebar.multiselect("Clients", client_names)
+# === Clients ===
+client_options = ["📌 Tous"] + client_names
+selected_client_names = st.sidebar.multiselect("Clients", client_options)
+if "📌 Tous" in selected_client_names:
+    selected_client_names = client_names
 selected_clients = [clients_mapping[name] for name in selected_client_names]
-selected_campaign_names = st.sidebar.multiselect("Campagnes", campaign_names)
+
+# === Campagnes ===
+campaign_options = ["📌 Tous"] + campaign_names
+selected_campaign_names = st.sidebar.multiselect("Campagnes", campaign_options)
+if "📌 Tous" in selected_campaign_names:
+    selected_campaign_names = campaign_names
 selected_campaigns = [campaign_mapping[name] for name in selected_campaign_names]
-selected_verticals = st.sidebar.multiselect("Vertical", verticals)
-selected_countries = st.sidebar.multiselect("Code postal", countries)
-selected_ads = st.sidebar.multiselect("Ad ID (aff_id)", ads)
+
+# === Verticales ===
+vertical_options = ["📌 Tous"] + verticals
+selected_verticals = st.sidebar.multiselect("Verticales", vertical_options)
+if "📌 Tous" in selected_verticals:
+    selected_verticals = verticals
+
+# === Code postal ===
+zipcode_options = ["📌 Tous"] + countries
+selected_countries = st.sidebar.multiselect("Code postal", zipcode_options)
+if "📌 Tous" in selected_countries:
+    selected_countries = countries
+
+# === Ads (aff_id) ===
+ads_options = ["📌 Tous"] + ads
+selected_ads = st.sidebar.multiselect("Ad ID (aff_id)", ads_options)
+if "📌 Tous" in selected_ads:
+    selected_ads = ads
+
+# === Dates ===
 date_debut = st.sidebar.date_input("Date de début", date(2024, 1, 1))
 date_fin = st.sidebar.date_input("Date de fin", date(2024, 12, 31))
+
 
 # === CONSTRUCTION REQUÊTE SQL DYNAMIQUE ===
 clauses = ["1=1"]
@@ -171,6 +198,69 @@ df.drop(columns=["lead_heat_minutes"], inplace=True)
 colonnes_a_supprimer = ["stat_id", "currency", "firstname", "lastname", "city", "registration_created_at"]
 df_clean = df.drop(columns=colonnes_a_supprimer, errors="ignore")
 
+# === KPIs ===
+st.subheader("📌 Indicateurs clés")
+
+# Durée brute avant formatage
+df["lead_heat_minutes"] = (
+    pd.to_datetime(df["lead_created_at"]) - pd.to_datetime(df["registration_created_at"])
+)
+
+# Moyenne en timedelta
+mean_heat_timedelta = df["lead_heat_minutes"].mean()
+
+# Fonction pour formatage lisible
+def formater_duree(td):
+    if pd.isnull(td):
+        return "–"
+    jours = td.days
+    heures, reste = divmod(td.seconds, 3600)
+    minutes, _ = divmod(reste, 60)
+    return f"{jours}j {heures}h {minutes}m"
+
+# Application du format lisible à la colonne
+df["lead_heat"] = df["lead_heat_minutes"].apply(formater_duree)
+df.drop(columns=["lead_heat_minutes"], inplace=True)
+
+# Calcul KPIs
+kpi_total_leads = len(df)
+kpi_revenu_total = df["price_eur"].sum()
+kpi_prix_moyen = df["price_eur"].mean()
+kpi_nb_sources = df["affiliate_name"].nunique()
+kpi_duree_moyenne = formater_duree(mean_heat_timedelta)
+
+# Affichage
+col1, col2, col3, col4, col5 = st.columns(5)
+col1.metric("🧾 Total leads", f"{kpi_total_leads:,}")
+col2.metric("💰 Revenu total (€)", f"{kpi_revenu_total:,.2f}")
+col3.metric("💸 Prix moyen / lead", f"{kpi_prix_moyen:,.2f}")
+col4.metric("📡 Sources uniques", kpi_nb_sources)
+col5.metric("🔥 Durée moyenne", kpi_duree_moyenne)
+
+
+import plotly.express as px
+
+# Préparation des données d'évolution
+df_evolution = df_clean.copy()
+df_evolution["jour"] = pd.to_datetime(df_evolution["lead_created_at"]).dt.date
+
+evol_data = df_evolution.groupby("jour").agg(
+    volume=("lead_id", "count"),
+    revenu=("price_eur", "sum")
+).reset_index()
+
+fig = px.bar(
+    evol_data,
+    x="jour",
+    y="volume",
+    title="📊 Volume de leads par jour",
+    labels={"jour": "Date", "volume": "Nombre de leads"},
+    height=300
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+
 # Affichage
 st.title("📊 Résultats filtrés")
 st.dataframe(df_clean, use_container_width=True)
@@ -182,40 +272,44 @@ st.download_button(
     file_name="résultats_filtrés.csv"
 )
 
+
 # === TABLEAU PAR SOURCE ET JOUR POUR UNE CAMPAGNE ===
 
 st.header("📊 Analyse quotidienne par source")
 
-# --- Filtre : sélection d'une campagne ---
-campagne_choisie = st.selectbox("Choisir une campagne", df["campaign_name"].dropna().unique())
-
-# --- Filtrage ---
-df_campagne = df[df["campaign_name"] == campagne_choisie].copy()
+df_campagne = df_clean.copy()
 
 # --- Préparation des champs ---
 df_campagne["jour"] = pd.to_datetime(df_campagne["lead_created_at"]).dt.date
 df_campagne["source"] = df_campagne["affiliate_name"].fillna("unknown")
 
-# --- Agrégation Volume + Ventilation ---
-grouped = df_campagne.groupby(["jour", "source"]).size().reset_index(name="volume")
-totals = grouped.groupby("jour")["volume"].transform("sum")
-grouped["ventilation"] = (grouped["volume"] / totals * 100).round(0).astype(int)
+if df_campagne.empty:
+    st.info("Aucune donnée disponible pour les filtres sélectionnés.")
+else:
+    # --- Agrégation Volume + Ventilation ---
+    grouped = df_campagne.groupby(["jour", "source"]).size().reset_index(name="volume")
+    totals = grouped.groupby("jour")["volume"].transform("sum")
+    grouped["ventilation"] = (grouped["volume"] / totals * 100).round(0).astype(int)
 
-# --- Format Volume – Ventilation% ---
-grouped["cell"] = grouped["volume"].astype(str) + " – " + grouped["ventilation"].astype(str) + "%"
+    # --- Format Volume – Ventilation% ---
+    grouped["cell"] = grouped["volume"].astype(str) + " – " + grouped["ventilation"].astype(str) + "%"
 
-# --- Pivot du tableau ---
-pivot = grouped.pivot(index="source", columns="jour", values="cell").fillna("0 – 0%").sort_index()
+    # --- Pivot du tableau ---
+    pivot = grouped.pivot(index="source", columns="jour", values="cell").fillna("0 – 0%").sort_index()
 
-# --- Affichage du tableau ---
-st.subheader(f"🧾 Détail par source – {campagne_choisie}")
-st.dataframe(pivot, use_container_width=True)
+    if pivot.empty:
+        st.info("Aucune donnée à afficher pour les jours disponibles dans cette période.")
+    else:
+        # --- Affichage du tableau ---
+        st.subheader("🧾 Détail par source pour les campagnes filtrées")
+        st.dataframe(pivot, use_container_width=True)
 
-# --- Export CSV du tableau ---
-csv_export = pivot.reset_index().to_csv(index=False).encode("utf-8")
-st.download_button(
-    label="📥 Télécharger le tableau (CSV)",
-    data=csv_export,
-    file_name=f"source_jour_{campagne_choisie.replace(' ', '_')}.csv",
-    mime="text/csv"
-)
+        # --- Export CSV du tableau ---
+        csv_export = pivot.reset_index().to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Télécharger le tableau (CSV)",
+            data=csv_export,
+            file_name="source_jour_filtrées.csv",
+            mime="text/csv"
+        )
+
