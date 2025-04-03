@@ -181,3 +181,41 @@ st.download_button(
     df_clean.to_csv(index=False).encode("utf-8"),
     file_name="résultats_filtrés.csv"
 )
+
+# === TABLEAU PAR SOURCE ET JOUR POUR UNE CAMPAGNE ===
+
+st.header("📊 Analyse quotidienne par source")
+
+# --- Filtre : sélection d'une campagne ---
+campagne_choisie = st.selectbox("Choisir une campagne", df["campaign_name"].dropna().unique())
+
+# --- Filtrage ---
+df_campagne = df[df["campaign_name"] == campagne_choisie].copy()
+
+# --- Préparation des champs ---
+df_campagne["jour"] = pd.to_datetime(df_campagne["lead_created_at"]).dt.date
+df_campagne["source"] = df_campagne["affiliate_name"].fillna("unknown")
+
+# --- Agrégation Volume + Ventilation ---
+grouped = df_campagne.groupby(["jour", "source"]).size().reset_index(name="volume")
+totals = grouped.groupby("jour")["volume"].transform("sum")
+grouped["ventilation"] = (grouped["volume"] / totals * 100).round(0).astype(int)
+
+# --- Format Volume – Ventilation% ---
+grouped["cell"] = grouped["volume"].astype(str) + " – " + grouped["ventilation"].astype(str) + "%"
+
+# --- Pivot du tableau ---
+pivot = grouped.pivot(index="source", columns="jour", values="cell").fillna("0 – 0%").sort_index()
+
+# --- Affichage du tableau ---
+st.subheader(f"🧾 Détail par source – {campagne_choisie}")
+st.dataframe(pivot, use_container_width=True)
+
+# --- Export CSV du tableau ---
+csv_export = pivot.reset_index().to_csv(index=False).encode("utf-8")
+st.download_button(
+    label="📥 Télécharger le tableau (CSV)",
+    data=csv_export,
+    file_name=f"source_jour_{campagne_choisie.replace(' ', '_')}.csv",
+    mime="text/csv"
+)
