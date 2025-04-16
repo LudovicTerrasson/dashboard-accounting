@@ -110,14 +110,33 @@ with tab2:
 
     import plotly.graph_objects as go
 
-    monthly_cap = 5000
-    leads_this_month = kpis['total_leads']
-    progress = leads_this_month / monthly_cap * 100
+    # === Calcul dynamique du cap global sur la période filtrée ===
+    delta_days = (end_date - start_date).days + 1
 
-    with st.expander("ℹ️ Objectif mensuel"):
+    has_daily = df["daily_cap"].notna().any()
+    has_monthly = df["monthly_cap"].notna().any()
+
+    if has_daily:
+        daily_cap_total = df["daily_cap"].dropna().astype(int).sum()
+        adjusted_cap = daily_cap_total * delta_days
+        cap_source = f"{daily_cap_total:,} leads / jour × {delta_days} jours"
+    elif has_monthly:
+        monthly_cap_total = df["monthly_cap"].dropna().astype(int).sum()
+        adjusted_cap = int(monthly_cap_total * (delta_days / 30))
+        cap_source = f"{monthly_cap_total:,} leads / mois × {delta_days}/30 jours"
+    else:
+        adjusted_cap = 1
+        cap_source = "Aucun cap défini dans la base"
+
+    leads_this_period = kpis['total_leads']
+    progress = leads_this_period / adjusted_cap * 100
+
+    # === Affichage expander + jauge ===
+    with st.expander("ℹ️ Objectif sur la période sélectionnée"):
         st.markdown(f"""
-        - Objectif mensuel fixé à **{monthly_cap:,} leads**
-        - Leads atteints sur la période : **{leads_this_month:,}**
+        - Source cap : **{cap_source}**
+        - Cap ajusté sur la période : **{adjusted_cap:,} leads**
+        - Leads atteints : **{leads_this_period:,}**
         - Progression actuelle : **{progress:.1f}%**
         """)
 
@@ -125,7 +144,7 @@ with tab2:
         mode="gauge+number",
         value=progress,
         domain={'x': [0, 1], 'y': [0, 1]},
-        title={'text': "Progression vers l'objectif mensuel (%)"},
+        title={'text': "Progression vers l'objectif (%)"},
         gauge={
             'axis': {'range': [0, 100]},
             'bar': {'color': "darkblue"},
@@ -137,6 +156,26 @@ with tab2:
         }
     ))
     st.plotly_chart(fig, use_container_width=True)
+
+
+    with st.expander("📊 Stock de leads (registration vs lead)"):
+        nb_registrations = df["registration_id"].nunique()
+        nb_leads = df["lead_id"].notna().sum()
+        stock = nb_registrations - nb_leads
+
+        st.markdown(f"""
+        - **Inscriptions (registration)** : {nb_registrations:,}
+        - **Leads créés (avec `lead_id`)** : {nb_leads:,}
+        - **Stock de leads restants** : {stock:,}
+        """)
+
+    fig_stock = px.pie(
+        names=["Leads créés", "Stock restant"],
+        values=[nb_leads, max(stock, 0)],
+        title="Répartition du stock de leads"
+    )
+    st.plotly_chart(fig_stock, use_container_width=True)
+
 
     with st.expander("ℹ️ Statuts des leads"):
         st.markdown("""
