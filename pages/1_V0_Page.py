@@ -1,6 +1,8 @@
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
+from utils import download_excel_button
+
 
 from datetime import datetime
 from page_config import set_dashboard_page_config
@@ -80,10 +82,10 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.subheader("📋 Résultats filtrés")
     st.dataframe(df_display, use_container_width=True)
-    st.download_button(
-        "📥 Télécharger CSV",
-        df_display.to_csv(index=False).encode("utf-8"),
-        file_name="résultats_filtrés.csv"
+    download_excel_button(
+        df=df_display,
+        filename="résultats_filtrés.xlsx",
+        label="📥 Télécharger Excel"
     )
 
 # === ONGLET 2 : KPIs ===
@@ -229,10 +231,44 @@ with tab3:
     show_leads_volume_chart(df_display)
 
 # === ONGLET 4 : Analyse approfondie ===
+def mapper_statuts_clients(statut):
+    mapping = {
+        "Sale": "Vente",
+        "Visit": "En cours",
+        "Uncalled": "En cours",
+        "Call Again": "En cours",
+        "Not Interested": "Refus",
+        "Duplicate": "Doublon",
+        "Wrong Phone": "Inéligible",
+        "Fake Phone": "Inéligible",
+        "Unreachable": "Inéligible",
+        "Not Cooperating": "Inéligible",
+        "Existing Client": "Hors cible",
+        "Out of Target": "Hors cible",
+        "Out of Geo": "Hors cible",
+        "Out of Age": "Hors cible",
+        "Out Of Eligible": "Hors cible"
+    }
+    return mapping.get(statut, "Autre")
+
+
 with tab4:
     show_source_by_day_pivot(df_display)
     show_lead_freshness_pivot(df)
     show_status_by_source_pivot(df_display)
+
+    st.subheader("📊 Statuts client (catégorisés)")
+
+    df_display["cat_statut"] = df_display["last_client_status"].fillna("no_status").apply(mapper_statuts_clients)
+    statuts_counts = df_display["cat_statut"].value_counts()
+
+    fig_cat_status = px.pie(
+        names=statuts_counts.index,
+        values=statuts_counts.values,
+        title="Répartition des statuts (catégorisés)"
+    )
+    st.plotly_chart(fig_cat_status, use_container_width=True)
+
 
 # === ONGLET 5 : Prévu pour ML & autres outils ===
 with tab5:

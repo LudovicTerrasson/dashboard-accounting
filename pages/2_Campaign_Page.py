@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
+from utils import download_excel_button
 import plotly.express as px
 import pandas as pd
 from datetime import datetime
@@ -27,6 +28,38 @@ selected_statuses = st.multiselect(
     default=['enabled']
 )
 
+# Sélection période
+today = datetime.today()
+start_date = st.date_input("📅 Date de début", today.replace(day=1))
+end_date = st.date_input("📅 Date de fin", today)
+
+
+# Afficher le Top 10 des campagnes par revenu total
+with engine.connect() as conn:
+    top_query = text("""
+        SELECT 
+            c.name AS campaign_name, 
+            COUNT(DISTINCT s.id) AS total_leads, 
+            SUM(s.price_eur) AS total_revenue, 
+            ROUND(AVG(s.price_eur)::numeric, 2) AS avg_price
+        FROM stat s
+        JOIN registration r ON r.id = s.registration
+        LEFT JOIN lead l ON l.registration_id = r.id
+        LEFT JOIN campaign c ON c.id = l.campaign_id
+        WHERE s.lead_created_at BETWEEN :start_date AND :end_date
+        GROUP BY c.name
+        ORDER BY total_revenue DESC
+        LIMIT 10
+
+    """)
+    top_df = pd.read_sql(top_query, conn, params={"start_date": start_date, "end_date": end_date})
+    default_campaign = top_df["campaign_name"].iloc[0] if not top_df.empty else None
+
+
+st.subheader("🏆 Top 10 campagnes par revenu total (€)")
+st.dataframe(top_df, use_container_width=True)
+download_excel_button(top_df, filename="top10.xlsx", label="⬇️ Exporter les données en Excel")
+
 # Sélection campagne
 with engine.connect() as conn:
     if selected_statuses:
@@ -46,12 +79,11 @@ with engine.connect() as conn:
         """
     campagnes = pd.read_sql(query_str, conn)["name"].tolist()
 
-selected_campagne = st.selectbox("🎯 Campagne à analyser", campagnes)
-
-# Sélection période
-today = datetime.today()
-start_date = st.date_input("📅 Date de début", today.replace(day=1))
-end_date = st.date_input("📅 Date de fin", today)
+selected_campagne = st.selectbox(
+    "🎯 Campagne à analyser",
+    campagnes,
+    index=campagnes.index(default_campaign) if default_campaign in campagnes else 0
+)
 
 # Chargement données
 query = text("""
@@ -94,6 +126,7 @@ with engine.connect() as conn:
 # Affichage data brute
 st.subheader("📋 Données filtrées")
 st.dataframe(df, use_container_width=True)
+download_excel_button(df, filename="leads_filtrés.xlsx", label="⬇️ Exporter les données en Excel")
 
 # KPIs
 st.subheader("📌 Indicateurs clés")

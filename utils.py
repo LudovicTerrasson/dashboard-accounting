@@ -21,3 +21,17 @@ def formater_duree(td):
     heures, reste = divmod(td.seconds, 3600)
     minutes, _ = divmod(reste, 60)
     return f"{jours}j {heures}h {minutes}m"
+
+import streamlit as st
+import io
+
+def download_excel_button(df: pd.DataFrame, filename: str = "export.xlsx", label: str = "📥 Télécharger Excel"):
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
+    st.download_button(
+        label=label,
+        data=buffer.getvalue(),
+        file_name=filename,
+        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )

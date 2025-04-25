@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from utils import formater_duree
+from utils import formater_duree, download_excel_button
 
 # === Chart: Volume de leads par jour ===
 def show_leads_volume_chart(df):
@@ -41,11 +41,10 @@ def show_source_by_day_pivot(df):
     pivot = grouped.pivot(index="source", columns="jour", values="cell").fillna("0 – 0%").sort_index()
 
     st.dataframe(pivot, use_container_width=True)
-    st.download_button(
-        label="📥 Télécharger le tableau (CSV)",
-        data=pivot.reset_index().to_csv(index=False).encode("utf-8"),
-        file_name="source_jour_filtrées.csv",
-        mime="text/csv"
+    download_excel_button(
+        df=pivot.reset_index(),
+        filename="source_jour_filtrées.xlsx",
+        label="📥 Télécharger le tableau (Excel)"
     )
 
 # === Table: Fraîcheur des leads ===
@@ -82,11 +81,10 @@ def show_lead_freshness_pivot(df):
     pivot = grouped.pivot(index="catégorie", columns="jour", values="cell").fillna("0 (0%)")
 
     st.dataframe(pivot, use_container_width=True)
-    st.download_button(
-        label="📥 Télécharger tableau fraîcheur (CSV)",
-        data=pivot.reset_index().to_csv(index=False).encode("utf-8"),
-        file_name="ventilation_fraicheur_leads.csv",
-        mime="text/csv"
+    download_excel_button(
+        df=pivot.reset_index(),
+        filename="ventilation_fraicheur_leads.xlsx",
+        label="📥 Télécharger tableau fraîcheur (Excel)"
     )
 
 # === Table: Statuts par source ===
@@ -108,9 +106,8 @@ def show_status_by_source_pivot(df):
     pivot = grouped.pivot(index="source", columns="statut", values="cell").fillna("0 (0%)")
 
     st.dataframe(pivot, use_container_width=True)
-    st.download_button(
-        label="📥 Télécharger le tableau des statuts (CSV)",
-        data=pivot.reset_index().to_csv(index=False).encode("utf-8"),
-        file_name="statuts_par_source.csv",
-        mime="text/csv"
+    download_excel_button(
+        df=pivot.reset_index(),
+        filename="statuts_par_source.xlsx",
+        label="📥 Télécharger le tableau des statuts (Excel)"
     )
