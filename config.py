@@ -10,4 +10,11 @@ def get_engine():
     DB_PORT = st.secrets["DB_PORT"]
     DB_NAME = st.secrets["DB_NAME"]
 
-    return create_engine(f"{DB_TYPE}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+    try:
+        return create_engine(
+            f"{DB_TYPE}://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
+            connect_args={"connect_timeout": 5}
+        )
+    except Exception as e:
+        raise RuntimeError(f"Database connection failed: {e}") from e
+
