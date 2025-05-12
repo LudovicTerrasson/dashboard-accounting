@@ -51,10 +51,6 @@ if selections["verticals"]:
     clauses.append("v.name IN :verticals")
     params["verticals"] = tuple(selections["verticals"])
 
-if selections["countries"]:
-    clauses.append("r.zipcode IN :countries")
-    params["countries"] = tuple(selections["countries"])
-
 if selections["ads"]:
     clauses.append("s.aff_id IN :ads")
     params["ads"] = tuple(selections["ads"])

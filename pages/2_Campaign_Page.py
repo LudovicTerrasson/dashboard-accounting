@@ -15,24 +15,16 @@ from visuals import (
 )
 
 set_dashboard_page_config()
-st.title("📦 Analyse par campagne")
 
 # Connexion BDD
 engine = get_engine()
 
-# Statuts de campagne à inclure
-status_options = ['enabled', 'paused', 'disabled', 'NULL']
-selected_statuses = st.multiselect(
-    "📋 Statuts de campagnes à inclure",
-    options=status_options,
-    default=['enabled']
-)
+# === Filtres dans la sidebar ===
+st.sidebar.title("🎯 Filtres Campagne")
 
-# Sélection période
 today = datetime.today()
-start_date = st.date_input("📅 Date de début", today.replace(day=1))
-end_date = st.date_input("📅 Date de fin", today)
-
+start_date = st.sidebar.date_input("Date de début", today.replace(day=1))
+end_date = st.sidebar.date_input("Date de fin", today)
 
 # Afficher le Top 10 des campagnes par revenu total
 with engine.connect() as conn:
@@ -56,11 +48,16 @@ with engine.connect() as conn:
     default_campaign = top_df["campaign_name"].iloc[0] if not top_df.empty else None
 
 
-st.subheader("🏆 Top 10 campagnes par revenu total (€)")
-st.dataframe(top_df, use_container_width=True)
-download_excel_button(top_df, filename="top10.xlsx", label="⬇️ Exporter les données en Excel")
+status_options = ['enabled', 'paused', 'disabled', 'NULL']
+selected_statuses = st.sidebar.multiselect(
+    "Statuts de campagnes",
+    options=status_options,
+    default=['enabled']
+)
 
-# Sélection campagne
+
+
+# Campagne à analyser
 with engine.connect() as conn:
     if selected_statuses:
         placeholders = ",".join(f"'{s}'" for s in selected_statuses if s != 'NULL')
@@ -79,8 +76,8 @@ with engine.connect() as conn:
         """
     campagnes = pd.read_sql(query_str, conn)["name"].tolist()
 
-selected_campagne = st.selectbox(
-    "🎯 Campagne à analyser",
+selected_campagne = st.sidebar.selectbox(
+    "Campagne à analyser",
     campagnes,
     index=campagnes.index(default_campaign) if default_campaign in campagnes else 0
 )
@@ -123,43 +120,15 @@ params = {"campagne": selected_campagne, "start_date": start_date, "end_date": e
 with engine.connect() as conn:
     df = pd.read_sql(query, conn, params=params)
 
-# Affichage data brute
-st.subheader("📋 Données filtrées")
-st.dataframe(df, use_container_width=True)
-download_excel_button(df, filename="leads_filtrés.xlsx", label="⬇️ Exporter les données en Excel")
-
-# KPIs
-st.subheader("📌 Indicateurs clés")
 kpis = compute_kpis(df)
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("🧾 Total leads", f"{kpis['total_leads']:,}")
-col2.metric("💰 Revenu total (€)", f"{kpis['total_revenue']:,.2f}")
-col3.metric("💸 Prix moyen / lead", f"{kpis['avg_price']:,.2f}")
-col4.metric("📡 Sources uniques", kpis["unique_sources"])
-col5.metric("🔥 Chaleur moyenne", formater_duree(kpis["avg_heat"]))
-
-# === Calcul du cap ajusté (daily cap réel par jour OU fallback monthly cap) ===
 df["jour"] = pd.to_datetime(df["lead_created_at"]).dt.date
-
-# Cap réel basé sur daily_cap par jour (somme des daily_cap distincts)
-cap_par_jour = (
-    df.groupby("jour")["daily_cap"]
-    .max()
-    .fillna(0)
-    .astype(int)
-)
+cap_par_jour = df.groupby("jour")["daily_cap"].max().fillna(0).astype(int)
 real_daily_cap_total = cap_par_jour.sum()
-
-# Cap indicatif basé sur une seule valeur unique de monthly_cap
 monthly_cap_vals = df["monthly_cap"].dropna().astype(int).unique()
 monthly_cap_total = int(monthly_cap_vals[0]) if len(monthly_cap_vals) > 0 else 0
 monthly_cap_adjusted = int(monthly_cap_total * ((end_date - start_date).days + 1) / 30)
-
-# Nombre de leads sur la période
 leads_this_period = kpis["total_leads"]
 
-# Bloc d’explication + graphique comparatif
-st.subheader("📊 Comparatif : Leads vs Cap réel et indicatif")
 values = {
     "Leads générés": leads_this_period,
     "Cap réel (daily_cap jour/jour)": real_daily_cap_total,
@@ -179,25 +148,24 @@ fig_bar.update_layout(
     yaxis=dict(autorange="reversed"),
     height=320
 )
-st.plotly_chart(fig_bar, use_container_width=True)
-st.caption("""
-- 🟦 Leads générés sur la période
-- 🟩 Cap réel : somme des `daily_cap` jour par jour (variation possible)
-- 🟧 Cap indicatif basé sur `monthly_cap` unique de la campagne
-""")
 
-# 🥧 Répartition des statuts clients
-st.subheader("🥧 Répartition des statuts clients")
 status_counts = df["last_client_status"].fillna("no_status").value_counts()
 fig_status = px.pie(
     names=status_counts.index,
     values=status_counts.values,
     title="Répartition des statuts des leads"
 )
-st.plotly_chart(fig_status, use_container_width=True)
 
-# 📈 Courbe du daily_cap réel par jour
-st.subheader("📈 Évolution du cap journalier réel")
+df["statut_simplifié"] = df["last_client_status"].fillna("no_status").apply(
+    lambda x: "Vente" if x.lower() == "sale" else "Non vendu"
+)
+transfo_counts = df["statut_simplifié"].value_counts()
+fig_transfo = px.pie(
+    names=transfo_counts.index,
+    values=transfo_counts.values,
+    title="Part des leads transformés (Sale) vs non transformés"
+)
+
 fig_line = px.line(
     cap_par_jour.reset_index(),
     x="jour",
@@ -205,12 +173,62 @@ fig_line = px.line(
     title="Cap réel journalier (daily_cap par jour)",
     markers=True
 )
-st.plotly_chart(fig_line, use_container_width=True)
 
-# 📊 Volume journalier
-st.subheader("📊 Volume journalier")
-show_leads_volume_chart(df)
+# === TABS ===
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📌 Vue d’ensemble",
+    "📊 Volume",
+    "🧠 Analyse approfondie",
+    "🤖 Modèles & outils",
+    "📋 Données"
+])
 
-# 📊 Statuts des leads
-st.subheader("📊 Statuts des leads")
-show_status_by_source_pivot(df)
+with tab1:
+    st.subheader("🏆 Top 10 campagnes par revenu total (€)")
+    st.dataframe(top_df, use_container_width=True)
+    download_excel_button(top_df, filename="top10.xlsx", label="⬇️ Exporter les données en Excel")
+    st.subheader("📌 Indicateurs clés")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("🧾 Total leads", f"{kpis['total_leads']:,}")
+    col2.metric("💰 Revenu total (€)", f"{kpis['total_revenue']:,.2f}")
+    col3.metric("💸 Prix moyen / lead", f"{kpis['avg_price']:,.2f}")
+    col4.metric("📡 Sources uniques", kpis["unique_sources"])
+    col5.metric("🔥 Chaleur moyenne", formater_duree(kpis["avg_heat"]))
+
+    st.subheader("📊 Comparatif : Leads vs Cap réel et indicatif")
+    st.plotly_chart(fig_bar, use_container_width=True)
+    st.caption("""
+    - 🟦 Leads générés sur la période
+    - 🟩 Cap réel : somme des `daily_cap` jour par jour (variation possible)
+    - 🟧 Cap indicatif basé sur `monthly_cap` unique de la campagne
+    """)
+
+    st.subheader("📊 Répartition des statuts et taux de transformation")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(fig_status, use_container_width=True)
+    with col2:
+        st.plotly_chart(fig_transfo, use_container_width=True)
+
+
+with tab2:
+    st.subheader("📊 Volume journalier")
+    show_leads_volume_chart(df)
+
+    st.subheader("📈 Évolution du cap journalier réel")
+    st.plotly_chart(fig_line, use_container_width=True)
+
+
+with tab3:
+    st.subheader("📊 Statuts des leads")
+    show_status_by_source_pivot(df)
+
+with tab4:
+    st.subheader("🤖 Modèles de prédiction & outils exploratoires")
+    st.info("Section prévue pour ajouter des outils ou modèles à l’avenir.")
+
+with tab5:
+    st.subheader("📋 Données filtrées")
+    st.dataframe(df, use_container_width=True)
+    download_excel_button(df, filename="leads_filtrés.xlsx", label="⬇️ Exporter les données en Excel")
+

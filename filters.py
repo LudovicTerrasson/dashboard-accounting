@@ -9,8 +9,9 @@ def build_filters(clients_mapping, campaigns_df, verticals, countries, ads):
     campaign_names = list(campaigns_df["name"])
     campaign_mapping = dict(zip(campaigns_df["name"], campaigns_df["id"]))
 
-    selected_client_names = st.sidebar.multiselect("Clients", client_names)
+    selected_verticals = st.sidebar.multiselect("Verticales", verticals)
     selected_campaign_names = st.sidebar.multiselect("Campagnes", campaign_names)
+    selected_client_names = st.sidebar.multiselect("Clients", client_names)
 
     villes_connues = ["Abidjan", "Dakar", "Paris", "Casablanca", "Tunis",
                       "Lyon", "Yaoundé", "Alger", "Bruxelles", "Marseille"]
@@ -19,15 +20,13 @@ def build_filters(clients_mapping, campaigns_df, verticals, countries, ads):
     campagnes_villes = [camp for ville in selected_villes for camp in ville_mapping[ville]]
     selected_campaign_names = list(set(selected_campaign_names + campagnes_villes))
 
-    selected_verticals = st.sidebar.multiselect("Verticales", verticals)
-    selected_countries = st.sidebar.multiselect("Code postal", countries)
+    
     selected_ads = st.sidebar.multiselect("Ad ID (aff_id)", ads)
 
     return {
         "clients": [clients_mapping[name] for name in selected_client_names],
         "campaigns": [campaign_mapping[name] for name in selected_campaign_names if name in campaign_mapping],
         "verticals": selected_verticals,
-        "countries": selected_countries,
         "ads": selected_ads,
         "ville_mapping": ville_mapping,
         "selected_campaign_names": selected_campaign_names
